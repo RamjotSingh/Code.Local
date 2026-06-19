@@ -29,6 +29,12 @@ public sealed class InitOptions
     public bool Persist { get; init; }
 
     /// <summary>
+    /// Whether to add the codelocal binary's folder to the user PATH so `codelocal` runs from
+    /// any shell. True by default; false under <c>--skip-updating-path</c>.
+    /// </summary>
+    public bool AddToPath { get; init; }
+
+    /// <summary>
     /// Whether missing dependencies may be installed without an interactive prompt.
     /// True under <c>--auto-install-dependencies</c>.
     /// </summary>
@@ -93,6 +99,7 @@ public sealed class InitOptions
             Optimize = !options.HasFlag("no-optimize"),
             SkipPull = options.HasFlag("skip-pull"),
             Persist = options.HasFlag("persist"),
+            AddToPath = !options.HasFlag("skip-updating-path"),
             InstallDependencies = options.HasFlag("auto-install-dependencies"),
             Wire = options.Text("wire") ?? "completions",
             RuntimeKey = options.Text("runtime") ?? "ollama",

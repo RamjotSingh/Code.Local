@@ -209,6 +209,8 @@ public static class InitCommand
             }
         }
 
+        RegisterBinaryOnPath(options);
+
         string body = options.Persist
             ? $"[green]Done.[/]{Markup.Escape(persistNote)}\n\nStart coding:  [blue]codelocal copilot[/]\n\n[grey]Env vars persisted: a new shell's plain `copilot` will also use local mode.[/]"
             : $"[green]Done.[/] Config saved to {Markup.Escape(ConfigStore.ConfigPath())}.\n\nStart coding:  [blue]codelocal copilot[/]";
@@ -251,6 +253,8 @@ public static class InitCommand
             MaxOutputTokens = options.MaxOutputTokens,
         };
         string persistNote = SaveConfigAndRender(options, config);
+
+        RegisterBinaryOnPath(options);
 
         string body = options.Persist
             ? $"[green]Done.[/]{Markup.Escape(persistNote)}\n\nStart coding:  [blue]codelocal copilot[/] (or plain [blue]copilot[/] in a new shell)\n\n[grey]Pointing at {Markup.Escape(endpoint)}.[/]"
@@ -307,6 +311,37 @@ public static class InitCommand
         AnsiConsole.Write(new Panel(body)
             .Header("Code.Local")
             .Border(BoxBorder.Rounded));
+    }
+
+    /// <summary>
+    /// Adds the codelocal binary's folder to the user PATH (unless <c>--skip-updating-path</c>) so
+    /// `codelocal` is runnable from any shell, and reports the outcome.
+    /// </summary>
+    private static void RegisterBinaryOnPath(InitOptions options)
+    {
+        if (!options.AddToPath)
+        {
+            return;
+        }
+
+        PathRegistrationState outcome = BinaryPathRegistrar.Register();
+
+        if (outcome == PathRegistrationState.Failed)
+        {
+            AnsiConsole.MarkupLine("[yellow]note:[/] couldn't add codelocal to your PATH automatically.");
+            return;
+        }
+
+        string directory = BinaryPathRegistrar.BinaryDirectoryOrNull() ?? string.Empty;
+
+        if (outcome == PathRegistrationState.AlreadyOnPath)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[grey]codelocal is already on your PATH ({directory}).[/]");
+            return;
+        }
+
+        string verb = outcome == PathRegistrationState.UpdatedOnPath ? "Updated" : "Added";
+        AnsiConsole.MarkupLineInterpolated($"[grey]{verb} codelocal on your PATH ({directory}). Open a new terminal to run `codelocal` from anywhere.[/]");
     }
 
     /// <summary>

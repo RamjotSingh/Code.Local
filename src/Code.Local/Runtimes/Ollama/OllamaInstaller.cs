@@ -7,9 +7,9 @@ using CodeLocal.Services;
 namespace CodeLocal.Runtimes.Ollama;
 
 /// <summary>
-/// Installs the Ollama runtime on the local machine using the platform's native
-/// mechanism (winget on Windows, Homebrew on macOS, the official script on Linux).
-/// Callers must obtain user consent before invoking <see cref="InstallAsync"/>.
+/// Installs the Ollama runtime on the local machine. Windows prefers the official installer
+/// (winget fallback) so it gets the latest release; macOS uses Homebrew; Linux uses the
+/// official install script. Callers must obtain user consent before invoking <see cref="InstallAsync"/>.
 /// </summary>
 public sealed class OllamaInstaller : IRuntimeInstaller
 {
@@ -37,46 +37,43 @@ public sealed class OllamaInstaller : IRuntimeInstaller
     }
 
     /// <summary>
-    /// Install Ollama on Windows using winget or direct download.
+    /// Install Ollama on Windows, preferring the official installer (always the latest
+    /// release) and falling back to winget. winget's Ollama package often lags several
+    /// releases behind, and an outdated Ollama breaks tool calling for newer models (ADR-13).
     /// </summary>
     private static async Task<bool> InstallWindowsAsync(Action<string> onLine, CancellationToken cancellationToken)
     {
-        string? wingetPath = ProcessRunner.GetFullPathForExecutableOrNull("winget");
-
-        if (wingetPath is not null)
+        if (await TryOfficialInstallerAsync(onLine, cancellationToken).ConfigureAwait(false))
         {
-            onLine("Installing Ollama via winget...");
-            int exitCode = await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
-                wingetPath,
-                new[]
-                {
-                    "install", "--id", "Ollama.Ollama", "-e", "--silent",
-                    "--disable-interactivity",
-                    "--accept-source-agreements", "--accept-package-agreements",
-                },
-                cancellationToken).ConfigureAwait(false);
-
-            if (exitCode == 0 && new OllamaService().IsInstalled)
-            {
-                return true;
-            }
-
-            onLine("winget install did not complete; falling back to direct download.");
+            return true;
         }
 
+        onLine("Falling back to winget...");
+
+        return await TryWingetAsync(onLine, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Download and silently run the official Windows installer (InnoSetup, per-user — no
+    /// elevation needed). Returns false if curl is missing or the download/install doesn't
+    /// leave Ollama installed, so the caller can fall back to winget.
+    /// </summary>
+    private static async Task<bool> TryOfficialInstallerAsync(Action<string> onLine, CancellationToken cancellationToken)
+    {
         string? curlPath = ProcessRunner.GetFullPathForExecutableOrNull("curl");
 
         if (curlPath is null)
         {
-            onLine("curl is not available to download the installer.");
+            onLine("curl isn't available to download the official installer.");
             return false;
         }
 
+        string installerUrl = $"{DownloadPage}/OllamaSetup.exe";
         string installerPath = Path.Combine(Path.GetTempPath(), "OllamaSetup.exe");
-        onLine($"Downloading {DownloadPage}/OllamaSetup.exe...");
+
+        onLine("Downloading the latest Ollama installer (this can take a few minutes)...");
         int downloadExitCode = await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
-            curlPath, new[] { "-fSL", "-o", installerPath, $"{DownloadPage}/OllamaSetup.exe" }, cancellationToken)
-            .ConfigureAwait(false);
+            curlPath, new[] { "-fSL", "-o", installerPath, installerUrl }, cancellationToken).ConfigureAwait(false);
 
         if (downloadExitCode != 0)
         {
@@ -86,7 +83,7 @@ public sealed class OllamaInstaller : IRuntimeInstaller
 
         onLine("Running the Ollama installer (silent)...");
         await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
-            installerPath, new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES" }, cancellationToken).ConfigureAwait(false);
+            installerPath, new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" }, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -98,6 +95,34 @@ public sealed class OllamaInstaller : IRuntimeInstaller
         }
 
         return new OllamaService().IsInstalled;
+    }
+
+    /// <summary>
+    /// Install Ollama via winget. Returns false if winget is missing or the install doesn't
+    /// leave Ollama installed.
+    /// </summary>
+    private static async Task<bool> TryWingetAsync(Action<string> onLine, CancellationToken cancellationToken)
+    {
+        string? wingetPath = ProcessRunner.GetFullPathForExecutableOrNull("winget");
+
+        if (wingetPath is null)
+        {
+            onLine("winget isn't available.");
+            return false;
+        }
+
+        onLine("Installing Ollama via winget...");
+        int exitCode = await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
+            wingetPath,
+            new[]
+            {
+                "install", "--id", "Ollama.Ollama", "-e", "--silent",
+                "--disable-interactivity",
+                "--accept-source-agreements", "--accept-package-agreements",
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return exitCode == 0 && new OllamaService().IsInstalled;
     }
 
     /// <summary>

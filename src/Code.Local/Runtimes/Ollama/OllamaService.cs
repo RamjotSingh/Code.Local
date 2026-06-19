@@ -340,11 +340,39 @@ public sealed class OllamaService
     }
 
     /// <summary>
-    /// Build a Modelfile that inherits a base tag and pins the context window size.
+    /// Capture a model's full Modelfile via `ollama show <tag> --modelfile`, including its
+    /// TEMPLATE, RENDERER, PARSER and default parameters, so a derived model can preserve them.
     /// </summary>
-    public static string BuildModelfile(string baseTag, int numCtx)
+    public async Task<string> ShowModelfileAsync(string tag, CancellationToken cancellationToken = default)
     {
-        return $"FROM {baseTag}\nPARAMETER num_ctx {numCtx}\n";
+        string executablePath = RequireExecutable();
+        (int exitCode, string standardOutput, string standardError) = await ProcessRunner
+            .RunExecutableWithOutputCapturedAsync(executablePath, new[] { "show", tag, "--modelfile" }, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (exitCode != 0 || string.IsNullOrWhiteSpace(standardOutput))
+        {
+            throw new InvalidOperationException(
+                $"`ollama show {tag} --modelfile` failed (exit {exitCode}). {standardError}".Trim());
+        }
+
+        return standardOutput;
+    }
+
+    /// <summary>
+    /// Build a derived Modelfile from a base model's full Modelfile (as emitted by
+    /// `ollama show --modelfile`), overriding the context window and neutralizing
+    /// `presence_penalty`. Deriving from the full Modelfile keeps the base TEMPLATE / RENDERER
+    /// / PARSER — without which tool calling silently breaks for models with a custom renderer
+    /// (Qwen3.5 / Qwen3-Coder; see ollama/ollama#12792). `presence_penalty 0` overrides Qwen's
+    /// aggressive default (1.5) that stops the model reproducing file content verbatim — the
+    /// cause of Copilot "Edit: No match found" loops; it is a no-op for models that don't set it.
+    /// </summary>
+    public static string BuildModelfile(string baseModelfile, int numCtx)
+    {
+        string trimmedBase = baseModelfile.Replace("\r\n", "\n").TrimEnd('\n', ' ', '\t');
+
+        return $"{trimmedBase}\nPARAMETER num_ctx {numCtx}\nPARAMETER presence_penalty 0\n";
     }
 
     /// <summary>
