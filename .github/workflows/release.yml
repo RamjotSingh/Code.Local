@@ -1,0 +1,71 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write   # required to create the release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest   # self-contained single-file cross-publishes every RID from one host
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Publish & package all RIDs
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for RID in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            echo "::group::publish $RID"
+            dotnet publish src/Code.Local -c Release -r "$RID" --self-contained true \
+              -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true \
+              -p:DebugType=none -p:Version="$VERSION" \
+              -o "publish/$RID"
+            case "$RID" in
+              win-*)
+                (cd "publish/$RID" && zip -q "../../dist/codelocal-$VERSION-$RID.zip" codelocal.exe) ;;
+              *)
+                chmod +x "publish/$RID/codelocal"
+                tar -C "publish/$RID" -czf "dist/codelocal-$VERSION-$RID.tar.gz" codelocal ;;
+            esac
+            echo "::endgroup::"
+          done
+          (cd dist && sha256sum * > checksums.txt)
+          ls -la dist
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codelocal-${{ steps.ver.outputs.version }}
+          path: dist/*
+
+      - name: Attach to GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true

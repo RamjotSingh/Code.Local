@@ -1,0 +1,18 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Build output
+publish/
+artifacts/
+dist/
+
+## Code.Local generated installers
+codelocal-installer/
+
+## OS
+.DS_Store
+Thumbs.db

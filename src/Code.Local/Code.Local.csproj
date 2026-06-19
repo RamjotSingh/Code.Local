@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <CurrentDotNetRuntimeVersion>net10.0</CurrentDotNetRuntimeVersion>
+    <TargetFrameworks>$(CurrentDotNetRuntimeVersion)</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>codelocal</AssemblyName>
+    <RootNamespace>CodeLocal</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.1.0</Version>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.56.0" />
+  </ItemGroup>
+
+  <Target Name="RunPublish" AfterTargets="DispatchToInnerBuilds" Condition="'$(IsCustomPublishRunning)' != 'true' AND '$(IsInnerBuild)' != 'true'">
+    <Message Text="Running publish to $(OutputPath)" />
+    <ItemGroup>
+      <ProjectsToPublish Include="$(MSBuildProjectFile)">
+        <Properties>RuntimeIdentifier=win-x64;PublishDir=$(OutputPath)\publish\win-x64;PublishSingleFile=true;SelfContained=true;IsCustomPublishRunning=true;TargetFramework=$(CurrentDotNetRuntimeVersion)</Properties>
+      </ProjectsToPublish>
+      <ProjectsToPublish Include="$(MSBuildProjectFile)">
+        <Properties>RuntimeIdentifier=linux-x64;PublishDir=$(OutputPath)\publish\linux-x64;PublishSingleFile=true;SelfContained=true;IsCustomPublishRunning=true;TargetFramework=$(CurrentDotNetRuntimeVersion)</Properties>
+      </ProjectsToPublish>
+      <ProjectsToPublish Include="$(MSBuildProjectFile)">
+        <Properties>RuntimeIdentifier=osx-x64;PublishDir=$(OutputPath)\publish\osx-x64;PublishSingleFile=true;SelfContained=true;IsCustomPublishRunning=true;TargetFramework=$(CurrentDotNetRuntimeVersion)</Properties>
+      </ProjectsToPublish>
+    </ItemGroup>
+    <MSBuild Projects="@(ProjectsToPublish)" Targets="Publish" />
+  </Target>
+
+</Project>
