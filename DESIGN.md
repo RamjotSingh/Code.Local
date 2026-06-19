@@ -409,7 +409,7 @@ Runtimes/
   Ollama/               # everything Ollama-specific lives here
     OllamaRuntime.cs    # implements IModelRuntime over OllamaService
     OllamaService.cs    # CLI + HTTP calls to the local Ollama daemon
-    OllamaInstaller.cs  # IRuntimeInstaller (winget / brew / install.sh)
+    OllamaInstaller.cs  # IRuntimeInstaller (official installer / winget / brew / install.sh)
     Models/             # Ollama wire DTOs (reflection-based System.Text.Json)
 ```
 
@@ -417,7 +417,9 @@ Runtimes/
 - `init` — **local mode** (default): detect HW → (consent-gated) install Ollama if
   missing → ensure the Copilot CLI is installed → recommend model → pull → tune
   (Modelfile, ctx, KV) → save config file → smoke test. With `--persist`, also writes
-  user env vars. **Client mode** (`--endpoint <url>` + `--model`): skip the runtime
+  user env vars. Both modes add the `codelocal` binary's folder to the user PATH by
+  default (a single managed entry, replaced on a move; `--skip-updating-path` opts out). **Client
+  mode** (`--endpoint <url>` + `--model`): skip the runtime
   entirely — just ensure the Copilot CLI and write a config pointing at an existing
   OpenAI-compatible endpoint. This is the payload the team installer runs.
 - `copilot` — launcher: read the saved config, (consent-gated) install the Copilot CLI
@@ -514,8 +516,9 @@ exec'd directly with `UseShellExecute=false`.
 **ADR-9 — Consent-gated runtime install, on the runtime.**
 `init` can install a missing runtime (and prerequisites it can manage), but never
 silently: interactive runs prompt for consent; non-interactive runs require
-`--auto-install-dependencies`. Installs prefer the platform package manager (winget /
-brew / official `install.sh`) and print the exact command first. The install capability
+`--auto-install-dependencies`. On Windows installs prefer the **official installer**
+(winget falls back) because winget's Ollama package lags releases; macOS uses Homebrew and
+Linux the official `install.sh`. Each step is announced before it runs. The install capability
 is a separate `IRuntimeInstaller` exposed via `IModelRuntime.Installer` (null when a
 runtime has no auto-installer) so each runtime owns its own mechanism and commands stay
 thin. The **Copilot CLI** itself is treated as another installable dependency through the
@@ -555,6 +558,21 @@ be a sibling integration consuming the same config, not a change to it — the s
 roadmap's "tool-agnostic clients" item. Data types follow the same ownership rule: each
 subsystem keeps its types in its own `Models/` folder, and the top-level `Models/` holds
 only types owned by no single subsystem (`CodeLocalConfig`, the `ModelCatalog`).
+
+**ADR-13 — Context-pinned models derive from the *full* base Modelfile.**
+`init` pins `num_ctx` by creating a derived model. It builds the Modelfile from
+`ollama show <tag> --modelfile` (carrying the base TEMPLATE / RENDERER / PARSER) and appends
+`PARAMETER num_ctx`, rather than a bare `FROM <tag>`. A bare `FROM` drops the renderer/parser
+(ollama/ollama#12792), which silently disables tool calling — fatal for Copilot's agent loop
+and the cause of "Qwen tool calls come back as text" reports. Newer Qwen models (Qwen3.5,
+Qwen3-Coder) ship a compiled RENDERER/PARSER with no text template, so preserving them is the
+fix; thinking can't be toggled via the Modelfile for those, and isn't needed once the parser
+is intact (the breakage was the parser, not the reasoning). It also sets `PARAMETER
+presence_penalty 0`: Qwen3.5's default of `1.5` penalizes repeated tokens, so the model
+can't echo file content verbatim — reproduced directly (an exact-echo test garbles at the
+default, is exact at 0) and the cause of Copilot's "Edit: No match found" loops. Gemma has
+no such default, which is why it edits cleanly; the override is a no-op for models that
+don't set it.
 
 ---
 

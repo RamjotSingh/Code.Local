@@ -100,6 +100,7 @@ internal class Program
         AnsiConsole.MarkupLine("  --auto-install-dependencies  Install the runtime, the Copilot CLI, and prerequisites if missing (consent for non-interactive runs)");
         AnsiConsole.MarkupLine("  --persist                Also set user environment variables (always-on, every shell)");
         AnsiConsole.MarkupLine("  --skip-pull              Configure only; don't download or smoke-test");
+        AnsiConsole.MarkupLine("  --skip-updating-path     Don't add the codelocal binary's folder to PATH (added by default)");
         AnsiConsole.MarkupLine("  --wire <completions|responses>  Copilot wire API (default completions; responses is experimental on Ollama)");
         AnsiConsole.MarkupLine("  --max-prompt-tokens <n>  Override prompt-token limit (default: context minus output budget)");
         AnsiConsole.MarkupLine("  --max-output-tokens <n>  Override output-token limit (default: a quarter of context, capped at 8192)");

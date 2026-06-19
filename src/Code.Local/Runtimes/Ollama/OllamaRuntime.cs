@@ -83,14 +83,17 @@ public sealed class OllamaRuntime : ModelRuntimeBase
     }
 
     /// <summary>
-    /// Create a derived model with the requested context size and return its ID.
+    /// Create a derived model that pins the requested context size while preserving the base
+    /// model's template and tool-call renderer/parser, then return its ID.
     /// </summary>
     public override async Task<string> PrepareAsync(
         CodingModel model, int numCtx, Action<string> onLine, CancellationToken cancellationToken = default)
     {
         string tag = RequireTag(model);
         string derivedId = model.Id;
-        string modelfile = OllamaService.BuildModelfile(tag, numCtx);
+
+        string baseModelfile = await _service.ShowModelfileAsync(tag, cancellationToken).ConfigureAwait(false);
+        string modelfile = OllamaService.BuildModelfile(baseModelfile, numCtx);
         int exitCode = await _service.CreateModelAsync(derivedId, modelfile, cancellationToken).ConfigureAwait(false);
 
         if (exitCode != 0)

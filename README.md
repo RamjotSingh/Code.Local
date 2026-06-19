@@ -89,9 +89,11 @@ codelocal init --non-interactive --model qwen3.5:9b --ctx 16384
 | `--auto-install-dependencies` | Install the runtime, the Copilot CLI, and prerequisites if missing (consent for non-interactive runs) |
 | `--persist` | Also set user environment variables (always-on, every shell) |
 | `--skip-pull` | Configure only; don't download or smoke-test |
+| `--skip-updating-path` | Don't add the codelocal binary's folder to PATH (added by default) |
 
-If Ollama is missing, interactive `init` offers to install it for you (via `winget`
-on Windows, `brew` on macOS, the official `install.sh` on Linux); in non-interactive
+If Ollama is missing, interactive `init` offers to install it for you (via the official
+installer with a `winget` fallback on Windows, `brew` on macOS, the official `install.sh`
+on Linux); in non-interactive
 mode pass `--auto-install-dependencies` to consent. The same step offers to install the
 **GitHub Copilot CLI** (via winget `GitHub.Copilot` on Windows, otherwise
 `npm install -g @github/copilot`) when it isn't already present. The exact command is
@@ -100,6 +102,10 @@ shown before it runs, and nothing is installed without consent.
 By default `init` does **not** mutate your global environment — it writes a config
 file and you start Copilot through the launcher. Use `--persist` only if you want
 plain `copilot` to use local mode in every shell.
+
+`init` does add the `codelocal` binary's own folder to your user PATH (so you can run
+`codelocal` from any shell) — a single managed entry that's replaced if you move the
+binary and re-run. Opt out with `--skip-updating-path`.
 
 **VRAM-aware context sizing.** Rather than a flat 32K window, `init` estimates the model's
 memory — weights + KV cache + runtime overhead — and auto-picks the largest context that
