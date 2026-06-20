@@ -18,8 +18,8 @@ It is built in .NET 10 and ships as a single binary.
 
 ## Contents
 
-- [Status](#status)
-- [Prerequisites](#prerequisites)
+- [Get started](#get-started)
+- [Requirements](#requirements)
 - [Build](#build)
 - [Usage](#usage) — `init` · `copilot` · `status` · `speed` · `package`
 - [Bundled models](#bundled-models)
@@ -28,17 +28,27 @@ It is built in .NET 10 and ships as a single binary.
 - [Design & rationale](#design--rationale)
 - [License](#license)
 
-## Status
+## Get started
 
-**v0.1 — solo mode.** Runs Ollama + Copilot directly (no gateway). The LiteLLM
-gateway layer (routing, per-user keys, quotas) is planned for v0.2 — see
-[Roadmap](#roadmap).
+1. **Get `codelocal`** — download the binary for your OS from [Releases](../../releases) (or build it below).
+2. **`codelocal init`** — installs Ollama + the Copilot CLI, picks and tunes a model for your GPU, and points Copilot at it.
+3. **`codelocal copilot`** — GitHub Copilot, now running on your local model.
 
-## Prerequisites
+That's the whole flow. `codelocal status` shows your setup; [Usage](#usage) has the rest.
 
-- [Ollama](https://ollama.com/download) installed and running.
-- [GitHub Copilot CLI](https://github.com/features/copilot/cli) installed.
-- An NVIDIA GPU is recommended but not required.
+## Requirements
+
+You don't need Ollama or the GitHub Copilot CLI beforehand — **`codelocal init`
+installs them for you** (with consent): the official Ollama installer on Windows
+(and the official `install.sh` on macOS and Linux), and the Copilot CLI via winget or npm.
+In non-interactive runs, pass `--auto-install-dependencies` to skip the prompts.
+
+What you actually need:
+
+- **A supported OS** — Windows, macOS, or Linux.
+- **For GPU acceleration (recommended):** an NVIDIA GPU with a recent driver, or
+  Apple Silicon. Code.Local installs Ollama but **not** GPU drivers — it checks the
+  driver and tells you if that's the missing piece. No GPU still works on CPU, just slower.
 
 ## Build
 
@@ -92,8 +102,8 @@ codelocal init --non-interactive --model qwen3.5:9b --ctx 16384
 | `--skip-updating-path` | Don't add the codelocal binary's folder to PATH (added by default) |
 
 If Ollama is missing, interactive `init` offers to install it for you (via the official
-installer with a `winget` fallback on Windows, `brew` on macOS, the official `install.sh`
-on Linux); in non-interactive
+installer with a `winget` fallback on Windows, and the official `install.sh` on macOS and
+Linux); in non-interactive
 mode pass `--auto-install-dependencies` to consent. The same step offers to install the
 **GitHub Copilot CLI** (via winget `GitHub.Copilot` on Windows, otherwise
 `npm install -g @github/copilot`) when it isn't already present. The exact command is
