@@ -409,7 +409,7 @@ Runtimes/
   Ollama/               # everything Ollama-specific lives here
     OllamaRuntime.cs    # implements IModelRuntime over OllamaService
     OllamaService.cs    # CLI + HTTP calls to the local Ollama daemon
-    OllamaInstaller.cs  # IRuntimeInstaller (official install.ps1 / winget / install.sh)
+    OllamaInstaller.cs  # IRuntimeInstaller (official OllamaSetup.exe / winget / install.sh)
     Models/             # Ollama wire DTOs (reflection-based System.Text.Json)
 ```
 
@@ -516,10 +516,12 @@ exec'd directly with `UseShellExecute=false`.
 **ADR-9 — Consent-gated runtime install, on the runtime.**
 `init` can install a missing runtime (and prerequisites it can manage), but never
 silently: interactive runs prompt for consent; non-interactive runs require
-`--auto-install-dependencies`. On Windows installs run Ollama's **official PowerShell
-installer** (`irm https://ollama.com/install.ps1 | iex`, with winget as a fallback) because
-winget's Ollama package lags releases; macOS and Linux run Ollama's official `install.sh`
-(`curl -fsSL https://ollama.com/install.sh | sh`). Each step is announced before it runs. The install capability
+`--auto-install-dependencies`. On Windows installs download and silently run Ollama's
+**official installer** (`OllamaSetup.exe`, with winget as a fallback) because winget's Ollama
+package lags releases — we download it directly rather than running Ollama's `install.ps1`,
+whose signature check can fail to load `Microsoft.PowerShell.Security` in spawned shells; macOS
+and Linux run Ollama's official `install.sh` (`curl -fsSL https://ollama.com/install.sh | sh`).
+Each step is announced before it runs. The install capability
 is a separate `IRuntimeInstaller` exposed via `IModelRuntime.Installer` (null when a
 runtime has no auto-installer) so each runtime owns its own mechanism and commands stay
 thin. The **Copilot CLI** itself is treated as another installable dependency through the
