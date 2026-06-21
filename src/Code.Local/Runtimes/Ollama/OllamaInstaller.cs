@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CodeLocal.Services;
@@ -7,15 +8,14 @@ namespace CodeLocal.Runtimes.Ollama;
 
 /// <summary>
 /// Installs the Ollama runtime on the local machine using Ollama's official install methods:
-/// Windows runs the official PowerShell installer (<c>irm https://ollama.com/install.ps1 | iex</c>)
-/// with a winget fallback; macOS and Linux run the official install script
+/// Windows downloads and silently runs the official <c>OllamaSetup.exe</c> (winget fallback);
+/// macOS and Linux run the official install script
 /// (<c>curl -fsSL https://ollama.com/install.sh | sh</c>). Callers must obtain user consent
 /// before invoking <see cref="InstallAsync"/>.
 /// </summary>
 public sealed class OllamaInstaller : IRuntimeInstaller
 {
     private const string DownloadPage = "https://ollama.com/download";
-    private const string WindowsInstallCommand = "irm https://ollama.com/install.ps1 | iex";
     private const string UnixInstallCommand = "curl -fsSL https://ollama.com/install.sh | sh";
 
     public string ManualInstallHint
@@ -35,15 +35,18 @@ public sealed class OllamaInstaller : IRuntimeInstaller
     }
 
     /// <summary>
-    /// Install Ollama on Windows by running the official PowerShell installer
-    /// (<c>irm https://ollama.com/install.ps1 | iex</c>), falling back to winget. The official
-    /// script downloads the latest signed installer, verifies its signature, and installs it
-    /// silently per-user; winget's Ollama package often lags several releases behind, and an
-    /// outdated Ollama breaks tool calling for newer models (ADR-13), so it is only a fallback.
+    /// Install Ollama on Windows by downloading and silently running the official
+    /// <c>OllamaSetup.exe</c>, falling back to winget. We download the installer directly rather
+    /// than piping Ollama's <c>install.ps1</c> to <c>iex</c> because that script's mandatory
+    /// signature check (<c>Get-AuthenticodeSignature</c>) can fail to load
+    /// <c>Microsoft.PowerShell.Security</c> in spawned PowerShell environments — and only after
+    /// downloading the full installer. winget's Ollama package often lags several releases
+    /// behind, and an outdated Ollama breaks tool calling for newer models (ADR-13), so it is
+    /// only a fallback.
     /// </summary>
     private static async Task<bool> InstallWindowsAsync(Action<string> onLine, CancellationToken cancellationToken)
     {
-        if (await TryOfficialInstallScriptAsync(onLine, cancellationToken).ConfigureAwait(false))
+        if (await TryOfficialInstallerAsync(onLine, cancellationToken).ConfigureAwait(false))
         {
             return true;
         }
@@ -54,28 +57,48 @@ public sealed class OllamaInstaller : IRuntimeInstaller
     }
 
     /// <summary>
-    /// Run Ollama's official Windows install script through Windows PowerShell. The script
-    /// downloads the latest signed <c>OllamaSetup.exe</c>, verifies its Authenticode signature,
-    /// and runs it silently per-user (no elevation). Returns false if PowerShell is missing or
-    /// the script doesn't leave Ollama installed, so the caller can fall back to winget.
+    /// Download the latest official Windows installer (<c>OllamaSetup.exe</c>) over HTTPS and
+    /// run it silently (InnoSetup, per-user — no elevation needed). Returns false if curl is
+    /// missing or the download/install doesn't leave Ollama installed, so the caller can fall
+    /// back to winget.
     /// </summary>
-    private static async Task<bool> TryOfficialInstallScriptAsync(Action<string> onLine, CancellationToken cancellationToken)
+    private static async Task<bool> TryOfficialInstallerAsync(Action<string> onLine, CancellationToken cancellationToken)
     {
-        string? powerShellPath = ProcessRunner.GetFullPathForExecutableOrNull("powershell");
+        string? curlPath = ProcessRunner.GetFullPathForExecutableOrNull("curl");
 
-        if (powerShellPath is null)
+        if (curlPath is null)
         {
-            onLine("Windows PowerShell isn't available to run the official installer.");
+            onLine("curl isn't available to download the official installer.");
             return false;
         }
 
-        onLine("Installing the latest Ollama via the official installer (this can take a few minutes)...");
-        int exitCode = await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
-            powerShellPath,
-            new[] { "-NoProfile", "-Command", WindowsInstallCommand },
-            cancellationToken).ConfigureAwait(false);
+        string installerUrl = $"{DownloadPage}/OllamaSetup.exe";
+        string installerPath = Path.Combine(Path.GetTempPath(), "OllamaSetup.exe");
 
-        return exitCode == 0 && new OllamaService().IsInstalled;
+        onLine("Downloading the latest Ollama installer (this can take a few minutes)...");
+        int downloadExitCode = await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
+            curlPath, new[] { "-fSL", "-o", installerPath, installerUrl }, cancellationToken).ConfigureAwait(false);
+
+        if (downloadExitCode != 0)
+        {
+            onLine("Download failed.");
+            return false;
+        }
+
+        onLine("Running the Ollama installer (silent)...");
+        await ProcessRunner.RunExecutableWithoutOutputCapturedAsync(
+            installerPath, new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" }, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            File.Delete(installerPath);
+        }
+        catch
+        {
+            /* best effort */
+        }
+
+        return new OllamaService().IsInstalled;
     }
 
     /// <summary>
